@@ -1,0 +1,30 @@
+name: Build Maestro
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '21'
+    - name: Start PostgreSQL (Windows has no Linux containers for 
+        Testcontainers)
+      if: runner.os == 'Windows'
+      env:
+        PGPASSWORD: root
+      run: |
+        Get-Service -Name "postgresql*" | Set-Service -StartupType Manual -PassThru | Start-Service
+        Get-ChildItem -Directory -Filter maestro-* | ForEach-Object { & "$env:PGBIN\createdb.exe" -U postgres $_.Name }
+        "MAESTRO_TEST_LOCAL_PG=1`njdbc_username=postgres`njdbc_password=root" >> $env:GITHUB_ENV
+    - name: Gradle build
+      run: ./gradlew build
+    timeout-minutes: 150
